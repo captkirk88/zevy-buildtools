@@ -1,0 +1,27 @@
+.{
+    .name = .zevy_buildtools,
+
+    .version = "0.0.0",
+
+    .fingerprint = 0xa563df37f1348f4a, // Changing this has security and trust implications.
+
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .zevy_mem = .{
+            .url = "git+https://github.com/captkirk88/zevy-mem#0f7114b597935cdd36b762e2acfdcb7be3863103",
+            .hash = "zevy_mem-0.0.1-jK9L0RsiAgBx3Gv5SRGLTmCrDw_ZC9Slt6v-3VzgGSPF",
+        },
+        .zevy_reflect = .{
+            .url = "git+https://github.com/captkirk88/zevy-reflect#623dbdefe33bd882c7cc662dcf77c8d0eb9e3a71",
+            .hash = "zevy_reflect-0.0.1-8SzYxohyAgDx8T6a91Pr2t-QHVufM6cKotl__9MOGzNL",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "LICENSE",
+        //"README.md",
+    },
+}
