@@ -12,11 +12,16 @@
             .hash = "zevy_mem-0.0.1-jK9L0RsiAgBx3Gv5SRGLTmCrDw_ZC9Slt6v-3VzgGSPF",
         },
         .zevy_reflect = .{
-            .url = "git+https://github.com/captkirk88/zevy-reflect#623dbdefe33bd882c7cc662dcf77c8d0eb9e3a71",
-            .hash = "zevy_reflect-0.0.1-8SzYxohyAgDx8T6a91Pr2t-QHVufM6cKotl__9MOGzNL",
+            .url = "git+https://github.com/captkirk88/zevy-reflect#54f9f5b97255cf3ea917bb336b29c38aebbd8da9",
+            .hash = "zevy_reflect-0.0.1-8SzYxiB0AgBD8rZxAF-p8eYtmEyl-jZ9BRVTmA0Nqddq",
         },
         .zevy_buildtools = .{
             .path = "../../zevy-buildtools",
+        },
+        .xml = .{
+            .url = "git+https://github.com/ianprime0509/zig-xml#4b7368d87bc331889dc579941f08f1bced1cbd24",
+            .hash = "xml-0.1.0-ZTbP3wE6AgAbDX6GvJ-Hv78tYkR1EcbJOhleFAuZD-xy",
+            .ignore = true,
         },
     },
     .paths = .{

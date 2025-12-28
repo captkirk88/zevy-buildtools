@@ -2,6 +2,10 @@ const std = @import("std");
 const Build = std.Build;
 const zon = std.zon;
 
+pub const ParsedDependency = struct {
+    url: []const u8,
+};
+
 fn findSubstring(hay: []const u8, needle: []const u8) ?usize {
     if (needle.len == 0) {
         return 0;
@@ -13,6 +17,99 @@ fn findSubstring(hay: []const u8, needle: []const u8) ?usize {
     }
 
     return null;
+}
+
+fn urlWithoutFragment(url: []const u8) []const u8 {
+    if (findSubstring(url, "#")) |p| {
+        return url[0..p];
+    } else {
+        return url;
+    }
+}
+
+fn parseZonFile(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, ReadError, ParseZon }!std.ArrayList(ParsedDependency) {
+    var deps = std.ArrayList(ParsedDependency).initCapacity(b.allocator, 8) catch return error.OutOfMemory;
+
+    const zonPath = zon_path.getPath(b);
+    var file = std.fs.cwd().openFile(zonPath, .{}) catch return error.ReadError;
+    defer file.close();
+
+    const data = file.readToEndAlloc(b.allocator, 64 * 1024) catch return error.ReadError;
+    defer b.allocator.free(data);
+
+    // Ensure null-terminated source for the parser
+    var src_buf = try b.allocator.alloc(u8, data.len + 1);
+    defer b.allocator.free(src_buf);
+    var idx: usize = 0;
+    while (idx < data.len) {
+        src_buf[idx] = data[idx];
+        idx += 1;
+    }
+    src_buf[data.len] = 0;
+    const src: [:0]const u8 = @ptrCast(src_buf[0..data.len :0]);
+
+    // Parse the whole file using std.zon.parse.fromSlice so we get diagnostics and ZOIR ownership
+    var diag: std.zon.parse.Diagnostics = .{};
+    const Root = struct {
+        name: ?std.zig.Zoir.Node.Index = null,
+        version: ?std.zig.Zoir.Node.Index = null,
+        fingerprint: ?std.zig.Zoir.Node.Index = null,
+        minimum_zig_version: ?std.zig.Zoir.Node.Index = null,
+        dependencies: ?std.zig.Zoir.Node.Index = null,
+        paths: ?std.zig.Zoir.Node.Index = null,
+    };
+
+    const root = std.zon.parse.fromSlice(Root, b.allocator, src, &diag, .{}) catch |err| {
+        // print diagnostics into an allocating writer and emit via debug
+        var aw: std.io.Writer.Allocating = .init(b.allocator);
+        diag.format(&aw.writer) catch {};
+        const out = aw.toOwnedSlice() catch |err2| {
+            aw.deinit();
+            diag.deinit(b.allocator);
+            return err2;
+        };
+        std.debug.print("ZON parse failed: {s}\n", .{out});
+        b.allocator.free(out);
+        aw.deinit();
+        diag.deinit(b.allocator);
+        return err;
+    };
+
+    // Use diag.zoir and diag.ast to inspect the dependencies node
+    if (root.dependencies) |deps_node| {
+        switch (deps_node.get(diag.zoir)) {
+            .struct_literal => |deps_fields| {
+                var di: usize = 0;
+                const DepEntry = struct {
+                    url: ?[]const u8 = null,
+                    path: ?[]const u8 = null,
+                    hash: ?[]const u8 = null,
+                    ignore: ?bool = null,
+                };
+
+                while (di < deps_fields.names.len) {
+                    const val_node = deps_fields.vals.at(@intCast(di));
+                    const entry = try std.zon.parse.fromZoirNode(DepEntry, b.allocator, diag.ast, diag.zoir, val_node, null, .{});
+
+                    const ignored = if (entry.ignore) |v| v else false;
+                    if (!ignored) {
+                        if (entry.url) |u| {
+                            const url_trim = urlWithoutFragment(u);
+                            try deps.append(b.allocator, ParsedDependency{ .url = url_trim });
+                        }
+                    }
+
+                    di += 1;
+                }
+            },
+            else => {},
+        }
+    }
+
+    // free diag (owns ast/zoir)
+    diag.deinit(b.allocator);
+
+    return deps;
 }
 
 /// Create a Run step that, when executed, will fetch URLs found in
@@ -41,69 +138,18 @@ pub fn createFetchStep(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, 
     const data = file.readToEndAlloc(b.allocator, 16 * 1024) catch return error.ReadError;
     defer b.allocator.free(data);
 
-    var remaining = data[0..];
-    var urls = std.ArrayList([]const u8).initCapacity(b.allocator, 8) catch return error.OutOfMemory;
-    defer urls.deinit(b.allocator);
+    // Use the helper parser above to get parsed dependencies
+    var deps = parseZonFile(b, zon_path) catch |err| return err;
+    defer deps.deinit(b.allocator);
 
-    while (true) {
-        const pos = findSubstring(remaining, "url") orelse break;
-        remaining = remaining[pos + 3 ..]; // move past "url"
-
-        // find '='
-        var eq_idx: usize = 0;
-        while (eq_idx < remaining.len and (remaining[eq_idx] != '=')) eq_idx += 1;
-        if (eq_idx >= remaining.len) break;
-        remaining = remaining[eq_idx + 1 ..];
-
-        // skip whitespace
-        var s: usize = 0;
-        while (s < remaining.len and (remaining[s] == ' ' or remaining[s] == '\t' or remaining[s] == '\n' or remaining[s] == '\r')) s += 1;
-        if (s >= remaining.len) break;
-        remaining = remaining[s..];
-
-        // Expect a quoted string (" or ') - use numeric codes to avoid escaping issues
-        const quote = remaining[0];
-        if (quote != 34 and quote != 39) continue;
-        var m: usize = 1;
-        while (m < remaining.len) {
-            if (remaining[m] == quote) break;
-            // simple escape handling
-            if (remaining[m] == '\\') m += 1; // skip escaped char
-            m += 1;
-        }
-        if (m >= remaining.len) break;
-
-        const url_slice = remaining[1..m];
-        // strip fragment after '#'
-        var hash_pos: ?usize = null;
-        var idx: usize = 0;
-        while (idx < url_slice.len) {
-            if (url_slice[idx] == '#') {
-                hash_pos = idx;
-                break;
-            }
-            idx += 1;
-        }
-        const url_trim = if (hash_pos) |p| url_slice[0..p] else url_slice;
-
-        // store slice (the actual bytes are owned by `data`); use append with allocator
-        urls.append(b.allocator, url_trim) catch continue;
-
-        remaining = remaining[m + 1 ..];
-    }
-
-    // Create a Run step per url that runs `zig fetch --save <url>` and make the
-    // container depend on them. The container is NOT registered as a top-level
-    // step by this function; the caller can attach it to the build as they like.
     var i: usize = 0;
-    while (i < urls.items.len) {
-        const url = urls.items[i];
-        const name = b.fmt("fetch: {s}", .{url});
+    for (deps.items) |d| {
+        const name = b.fmt("fetch: {s}", .{d.url});
         const run = std.Build.Step.Run.create(b, name);
         run.addArg("zig");
         run.addArg("fetch");
         run.addArg("--save");
-        run.addArg(url);
+        run.addArg(d.url);
         run.stdio = .inherit;
         run.has_side_effects = true;
         std.Build.Step.dependOn(container, &run.step);

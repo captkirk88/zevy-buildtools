@@ -1,30 +1,28 @@
 # zevy-buildtools
 
-A collection of build utilities for Zig projects, designed to streamline asset management, code formatting, and example execution. Built for Zig 0.15.x.
+A collection of build utilities for Zig projects, designed to streamline asset management, code formatting, and example execution.
 
 ## Features
 
-- **Asset Fetching**: Update dependencies with `zig build fetch`.
-- **Code Formatting**: Format your Zig source files using `zig build fmt`.
-- **Example Runner**: Build and run example projects with `zig build examples`.
-- **Asset Embedding**: Embed assets directly into your Zig binaries for easy distribution.
+- **Asset Fetching**: Update dependencies with `zig build fetch` using `@import("zig_buildtools").fetch.addFetchStep`.
+- **Code Formatting**: Format your Zig source files using `zig build fmt` using `@import("zig_buildtools").addFmtStep`.
+- **Example Runner**: Build and run example projects with `zig build examples` using `@import("zig_buildtools").setupExamples`.
+- **Asset Embedding**: Embed assets directly into your Zig binaries for easy distribution using `@import("zig_buildtools").embed`.
 
-> [!NOTE]
-> Use `zig build --help` to see all available commands and options provided by `zevy-buildtools`.
 
 ---
 
 ## Usage
 
-### 1. Fetch Assets
-Download and update external assets defined in your build configuration:
+### 1. Fetch Dependencies
+Calls `zig fetch` and updates external dependencies defined in your build configuration:
 
 ```sh
 zig build fetch
 ```
 
-- Downloads assets to the appropriate directory.
-- Supports custom asset sources and versioning.
+> [!NOTE]
+> zevy-buildtools enables you to use a `.ignore = true` on your dependency in build.zig.zon to tell fetch to ignore that dependency.  You may still use `zig fetch --save ...`.
 
 ### 2. Format Code
 Format all Zig source files in your project:
@@ -56,9 +54,14 @@ Embed assets into your Zig binary for portability:
 
 ## Getting Started
 
-1. Add `zevy-buildtools` to your Zig project build file.
+1. Add `zevy-buildtools` to your Zig project `build.zig` file.
 2. Import and configure in your `build.zig`:
    - See `example/build.zig` for usage patterns.
 3. Run the desired build commands as shown above.
+
+
+## Contributing
+
+Contributions are welcome! Ideas, kinda, just don't be dumb.
 
 ---
