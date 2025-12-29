@@ -117,15 +117,8 @@ fn parseZonFile(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, ReadErr
 /// only creates and returns the Run step and its dependent fetch tasks. The
 /// caller can decide to attach this Run to a top-level `fetch` step if desired.
 pub fn createFetchStep(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, ZonNotFound, ReadError, ParseZon }!*std.Build.Step {
-    // Create a *container* Step (top-level style) that does not run a process
-    // itself but depends on per-URL Run steps. This avoids creating a Run step
-    // with no argv which would panic the runner.
-    const container = b.allocator.create(std.Build.Step) catch return error.OutOfMemory;
-    container.* = std.Build.Step.init(.{
-        .id = .top_level,
-        .name = "fetch: run fetches",
-        .owner = b,
-    });
+    var container = b.step("fetch: run fetches", "Fetch external dependencies");
+    container.id = .top_level;
 
     // Try to open the zon file. If it doesn't exist, return ZonNotFound.
     const zonPath = zon_path.getPath(b);
