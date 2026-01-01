@@ -8,12 +8,12 @@
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .zevy_mem = .{
-            .url = "git+https://github.com/captkirk88/zevy-mem#0f7114b597935cdd36b762e2acfdcb7be3863103",
-            .hash = "zevy_mem-0.0.1-jK9L0RsiAgBx3Gv5SRGLTmCrDw_ZC9Slt6v-3VzgGSPF",
+            .url = "git+https://github.com/captkirk88/zevy-mem#dd759f4c5c97d2a725d4b6a7aaca0b7710d86d5d",
+            .hash = "zevy_mem-0.0.1-jK9L0ZWmAgDqAYi9gLqK0NHh33eiYzjUFjL6IzPBEj9g",
         },
         .zevy_reflect = .{
-            .url = "git+https://github.com/captkirk88/zevy-reflect#54f9f5b97255cf3ea917bb336b29c38aebbd8da9",
-            .hash = "zevy_reflect-0.0.1-8SzYxiB0AgBD8rZxAF-p8eYtmEyl-jZ9BRVTmA0Nqddq",
+            .url = "git+https://github.com/captkirk88/zevy-reflect#65e170f521b1d52878bcab2368dd85e3a57c1c20",
+            .hash = "zevy_reflect-0.0.1-8SzYxmR0AgCIv3CClZc7sGkrcRmI6IfdLYJ8W2OBnTy-",
         },
     },
 
