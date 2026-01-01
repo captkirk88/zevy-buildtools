@@ -1,10 +1,6 @@
 const std = @import("std");
-const examples_mod = @import("examples.zig");
 
-pub const examples = struct {
-    pub const isSelf = examples_mod.isSelf;
-    pub const setupExamples = examples_mod.setupExamples;
-};
+pub const examples = @import("examples.zig");
 
 pub const fetch = @import("fetch.zig");
 
