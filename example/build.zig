@@ -49,6 +49,13 @@ pub fn build(b: *std.Build) !void {
     test_step.dependOn(&run_mod_tests.step);
     test_step.dependOn(&run_exe_tests.step);
 
+    // Adds `zig build fetch`
     try buildtools.fetch.addFetchStep(b, b.path("build.zig.zon"));
+    // Adds `zig build get`
+    buildtools.fetch.addGetStep(b);
+    // Adds `zig build fmt`
     try buildtools.fmt.addFmtStep(b, true);
+
+    // Adds `zig build examples`
+    //try buildtools.examples.setupExamples(b, ...);
 }

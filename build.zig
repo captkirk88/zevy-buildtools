@@ -9,12 +9,6 @@ pub const embed = root.embed;
 pub const copy = root.copy;
 pub const utils = root.utils;
 
-// Although this function looks imperative, it does not perform the build
-// directly and instead it mutates the build graph (`b`) that will be then
-// executed by an external runner. The functions in `std.Build` implement a DSL
-// for defining build steps and express dependencies between them, allowing the
-// build runner to parallelize the build automatically (and the cache system to
-// know when a step doesn't need to be re-run).
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     //const optimize = b.standardOptimizeOption(.{});
@@ -22,6 +16,7 @@ pub fn build(b: *std.Build) void {
     const mod = b.addModule("zevy_buildtools", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
+        .optimize = .ReleaseSafe,
     });
 
     const mod_tests = b.addTest(.{
@@ -67,7 +62,7 @@ pub fn build(b: *std.Build) void {
     fetch.addFetchStep(b, b.path("build.zig.zon")) catch |err| switch (err) {
         error.OutOfMemory => @panic("Out of memory while creating fetch step"),
         error.ZonNotFound => @panic("build.zig.zon not found for fetch step"),
-        error.ReadError => @panic("Error reading build.zig.zon for fetch step"),
+        error.ZonFileReadError => @panic("Error reading build.zig.zon for fetch step"),
         error.ParseZon => @panic("Error parsing build.zig.zon for fetch step"),
     };
 

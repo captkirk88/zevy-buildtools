@@ -4,7 +4,7 @@ A collection of build utilities for Zig projects, designed to streamline asset m
 
 ## Features
 
-- **Asset Fetching**: Update dependencies with `zig build fetch` using `@import("zig_buildtools").fetch.addFetchStep`.
+- **Asset Fetching**: Update dependencies with `zig build fetch` using `@import("zig_buildtools").fetch.addFetchStep` or get new dependencies `zig build get` using `@import("zig_buildtools").fetch.addGetStep`.
 - **Code Formatting**: Format your Zig source files using `zig build fmt` using `@import("zig_buildtools").addFmtStep`.
 - **Example Runner**: Build and run example projects with `zig build examples` using `@import("zig_buildtools").setupExamples`.
 - **Asset Embedding**: Embed assets directly into your Zig binaries for easy distribution using `@import("zig_buildtools").embed`.
@@ -14,37 +14,45 @@ A collection of build utilities for Zig projects, designed to streamline asset m
 
 ## Usage
 
-### 1. Fetch Dependencies
+### Fetch Dependencies
 Calls `zig fetch` and updates external dependencies defined in your build configuration:
 
-```sh
+```
 zig build fetch
 ```
 
 > [!NOTE]
 > zevy-buildtools enables you to use a `.ignore = true` on your dependency in build.zig.zon to tell fetch to ignore that dependency.  You may still use `zig fetch --save ...`.
 
-### 2. Format Code
+### Get New Dependencies
+Fetch and add new dependencies without updating existing ones:
+
+```
+zig build get -- <dependency-url>
+```
+Internally invokes `zig build --save <dependency-url>`.
+
+### Format Code
 Format all Zig source files in your project:
 
-```sh
+```
 zig build fmt
 ```
 
 - Runs Zig's built-in formatter on your codebase.
 - Ensures consistent style and formatting.
 
-### 3. Build Examples
+### Build Examples
 Compile and run example projects:
 
-```sh
+```
 zig build examples
 ```
 
 - Builds all example Zig files in the `examples/` directory.
 - Useful for testing and showcasing features.
 
-### 4. Embed Assets
+### Embed Assets
 Embed assets into your Zig binary for portability:
 
 - Use the build tools to include files from `embedded_assets/` or other directories.
@@ -62,6 +70,6 @@ Embed assets into your Zig binary for portability:
 
 ## Contributing
 
-Contributions are welcome! Ideas, kinda, just don't be dumb.
+Contributions, suggestions, and ideas are welcome!
 
 ---

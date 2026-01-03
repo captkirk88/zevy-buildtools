@@ -8,20 +8,20 @@
 
     .dependencies = .{
         .zevy_mem = .{
-            .url = "git+https://github.com/captkirk88/zevy-mem#0f7114b597935cdd36b762e2acfdcb7be3863103",
-            .hash = "zevy_mem-0.0.1-jK9L0RsiAgBx3Gv5SRGLTmCrDw_ZC9Slt6v-3VzgGSPF",
+            .url = "git+https://github.com/captkirk88/zevy-mem#bb9b83e8d4a3ac689f0dfc9edae8015a1aa8835d",
+            .hash = "zevy_mem-0.0.1-jK9L0ZWmAgC17MDoo2QPM9b9LveBYWzxdqzQL6nTj6nH",
         },
         .zevy_reflect = .{
-            .url = "git+https://github.com/captkirk88/zevy-reflect#54f9f5b97255cf3ea917bb336b29c38aebbd8da9",
-            .hash = "zevy_reflect-0.0.1-8SzYxiB0AgBD8rZxAF-p8eYtmEyl-jZ9BRVTmA0Nqddq",
+            .url = "git+https://github.com/captkirk88/zevy-reflect#15e55f475c1b0d2f38accbd83a5a75c970ac5981",
+            .hash = "zevy_reflect-0.0.1-8SzYxmR0AgBRzHSiEaDYGLb6aMr_-tPzB-WEM31uKQfz",
         },
         .zevy_buildtools = .{
             .path = "../../zevy-buildtools",
         },
         .xml = .{
-            .url = "git+https://github.com/ianprime0509/zig-xml#4b7368d87bc331889dc579941f08f1bced1cbd24",
-            .hash = "xml-0.1.0-ZTbP3wE6AgAbDX6GvJ-Hv78tYkR1EcbJOhleFAuZD-xy",
-            .ignore = true,
+            .url = "git+https://github.com/ianprime0509/zig-xml#8874de5b846f4e3e806a062cd11a01b2bb90fc7a",
+            .hash = "xml-0.2.0-ZTbP3wE6AgCsnyZut_plzxi6WB2tzzh3kFRBOp3AL7n9",
+            .ignore = true, // Tells `zig build fetch` to ignore it
         },
     },
     .paths = .{

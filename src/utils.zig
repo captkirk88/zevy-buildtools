@@ -26,7 +26,8 @@ pub fn listDependencies(dependency: *std.Build.Dependency) void {
 /// List all dependencies of a given module.
 pub fn listModuleDependencies(module: *std.Build.Module) void {
     if (!builtin.is_test) {
-        std.debug.print("Module dependencies for {s}:\n", .{module.getGraph().names[0]});
+        const graph = module.getGraph();
+        std.debug.print("Module dependencies for {s}:\n", .{graph.names[0]});
         for (module.owner.available_deps) |dep| {
             std.debug.print("  - {s}\n", .{dep.@"0"});
         }
