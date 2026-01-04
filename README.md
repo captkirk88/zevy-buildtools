@@ -4,7 +4,9 @@ A collection of build utilities for Zig projects, designed to streamline asset m
 
 ## Features
 
-- **Asset Fetching**: Update dependencies with `zig build fetch` using `@import("zig_buildtools").fetch.addFetchStep` or get new dependencies `zig build get` using `@import("zig_buildtools").fetch.addGetStep`.
+- **Asset Fetching**: Update dependencies with `zig build fetch` using `@import("zig_buildtools").fetch.addFetchStep`.
+   - Get new dependencies `zig build get` using `@import("zig_buildtools").fetch.addGetStep`.
+   - List current dependencies with `zig build deps` using `@import("zig_buildtools").fetch.addDepsStep`.
 - **Code Formatting**: Format your Zig source files using `zig build fmt` using `@import("zig_buildtools").addFmtStep`.
 - **Example Runner**: Build and run example projects with `zig build examples` using `@import("zig_buildtools").setupExamples`.
 - **Asset Embedding**: Embed assets directly into your Zig binaries for easy distribution using `@import("zig_buildtools").embed`.
@@ -15,6 +17,7 @@ A collection of build utilities for Zig projects, designed to streamline asset m
 ## Usage
 
 ### Fetch Dependencies
+
 Calls `zig fetch` and updates external dependencies defined in your build configuration:
 
 ```
@@ -25,12 +28,20 @@ zig build fetch
 > zevy-buildtools enables you to use a `.ignore = true` on your dependency in build.zig.zon to tell fetch to ignore that dependency.  You may still use `zig fetch --save ...`.
 
 ### Get New Dependencies
+
 Fetch and add new dependencies without updating existing ones:
 
 ```
 zig build get -- <dependency-url>
 ```
 Internally invokes `zig build --save <dependency-url>`.
+
+#### List Dependencies
+List all current dependencies in your project:
+
+```
+zig build deps
+```
 
 ### Format Code
 Format all Zig source files in your project:

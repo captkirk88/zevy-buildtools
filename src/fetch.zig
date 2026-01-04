@@ -1,6 +1,8 @@
 const std = @import("std");
 const Build = std.Build;
 const zon = std.zon;
+const utils = @import("utils.zig");
+const builtin = @import("builtin");
 
 pub const ParsedDependency = struct {
     url: []const u8,
@@ -158,15 +160,14 @@ pub fn createFetchStep(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, 
 }
 
 fn makeFetchStep(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void {
-    // The dependencies are already set up, so just run them
-    for (step.dependencies.items) |dep| {
-        dep.make(options) catch |err| return err;
-    }
+    _ = options;
+    std.debug.print("fetched for: {s} (len {d})\n", .{ step.owner.build_root.path orelse ".", step.dependencies.items.len });
 }
 
 /// Convenience wrapper that creates the fetch container step and registers a
 /// top-level `fetch` step that depends on it.
 pub fn addFetchStep(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, ZonNotFound, ZonFileReadError, ParseZon }!void {
+    if (utils.isSelf(b) == false) return;
     const container = createFetchStep(b, zon_path) catch |err| return err;
     const top = b.step("fetch", "Fetch external dependencies");
     top.dependOn(container);
@@ -190,7 +191,6 @@ pub fn createGetStep(b: *Build) *std.Build.Step {
 const permitted_domains = [_][]const u8{
     "github.com", // tested
     "gitlab.com", //untested
-    "bitbucket.org", // untested
     "codeberg.org", //untested
 };
 
@@ -254,6 +254,7 @@ fn makeGetStep(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void
 ///
 /// Requires args to be passed to the build system when invoking `zig build get -- <url>`.
 pub fn addGetStep(b: *Build) void {
+    if (utils.isSelf(b) == false) std.debug.panic("get step ran for non-self build: {s}", .{b.build_root.path orelse "."});
     const step = createGetStep(b);
     const top = b.step("get", "Fetch a specific dependency");
     top.dependOn(step);

@@ -1,21 +1,11 @@
 const std = @import("std");
-
-/// Check if the build is running in this project
-pub fn isSelf(b: *std.Build) bool {
-    // Check for a file that only exists in the main zevy-ecs project
-    if (std.fs.accessAbsolute(b.path("build.zig").getPath(b), .{})) {
-        return true;
-    } else |_| {
-        return true;
-    }
-}
-
+const utils = @import("utils.zig");
 /// Recursively setup and add all examples found in the `examples/` directory
 ///
 /// Sets up the build step for each example found and one top-level step to run
 /// them all called `examples`.
 pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    if (isSelf(b) == false) return;
+    if (utils.isSelf(b) == false) return;
 
     // Examples
     const examples_step = b.step("examples", "Run all examples");

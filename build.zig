@@ -8,6 +8,7 @@ pub const fmt = root.fmt;
 pub const embed = root.embed;
 pub const copy = root.copy;
 pub const utils = root.utils;
+pub const deps = root.deps;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
@@ -59,7 +60,7 @@ pub fn build(b: *std.Build) void {
     run_example_step.dependOn(&example_run.step);
 
     // Add and register a top-level fetch step based on the zon file.
-    fetch.addFetchStep(b, b.path("build.zig.zon")) catch |err| switch (err) {
+    root.fetch.addFetchStep(b, b.path("build.zig.zon")) catch |err| switch (err) {
         error.OutOfMemory => @panic("Out of memory while creating fetch step"),
         error.ZonNotFound => @panic("build.zig.zon not found for fetch step"),
         error.ZonFileReadError => @panic("Error reading build.zig.zon for fetch step"),
@@ -67,6 +68,10 @@ pub fn build(b: *std.Build) void {
     };
 
     root.fmt.addFmtStep(b, true) catch |err| {
+        @panic(@errorName(err));
+    };
+
+    root.deps.addDepsStep(b) catch |err| {
         @panic(@errorName(err));
     };
 }

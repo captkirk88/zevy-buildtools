@@ -58,4 +58,7 @@ pub fn build(b: *std.Build) !void {
 
     // Adds `zig build examples`
     //try buildtools.examples.setupExamples(b, ...);
+
+    // Adds `zig build deps`
+    try buildtools.deps.addDepsStep(b);
 }

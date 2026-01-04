@@ -3,33 +3,60 @@ const builtin = @import("builtin");
 
 /// List all build dependencies.
 pub fn listBuildDependencies(b: *std.Build) void {
-    if (!builtin.is_test) {
-        std.debug.print("Stored dependencies:\n", .{});
-        for (b.available_deps) |depid| {
-            std.debug.print("DEP: {s}\n", .{depid.@"0"});
-            listDependencies(b.dependency(depid.@"0", .{}));
+    const deps = getBuildDependencies(b) catch return;
+    for (deps) |dep| {
+        std.debug.print("{s}\n", .{dep});
+        const mod_deps = getDependencyModules(b.dependency(dep, .{})) catch continue;
+        for (mod_deps) |module| {
+            listModuleDependencies(module.module);
         }
     }
 }
 
+pub fn getBuildDependencies(b: *std.Build) error{OutOfMemory}![]const []const u8 {
+    const allocator = b.allocator;
+    const available = b.available_deps;
+    var deps = try std.ArrayList([]const u8).initCapacity(allocator, available.len);
+
+    for (b.available_deps) |depid| {
+        try deps.append(allocator, depid.@"0");
+    }
+
+    return try deps.toOwnedSlice(allocator);
+}
+
 /// List all dependencies of a given dependency.
 pub fn listDependencies(dependency: *std.Build.Dependency) void {
-    if (!builtin.is_test) {
-        std.debug.print("Dependencies: {s}\n", .{dependency.builder.build_root.path orelse "unknown"});
-        var iter = dependency.builder.modules.iterator();
-        while (iter.next()) |entry| {
-            std.debug.print("- {s}\n", .{entry.key_ptr.*});
-        }
+    const modules = getDependencyModules(dependency) catch return;
+    for (modules) |module| {
+        std.debug.print("\tModule: {s}\n", .{module.name});
+        listModuleDependencies(module.module);
     }
+    std.debug.print("\t{s}\n", .{dependency.builder.build_root.path orelse "."});
+}
+
+const DepModule = struct {
+    name: []const u8,
+    module: *std.Build.Module,
+};
+pub fn getDependencyModules(dependency: *std.Build.Dependency) error{OutOfMemory}![]DepModule {
+    const allocator = dependency.builder.allocator;
+    var modules = try std.ArrayList(DepModule).initCapacity(allocator, dependency.builder.modules.count());
+    var iter = dependency.builder.modules.iterator();
+    while (iter.next()) |entry| {
+        try modules.append(allocator, .{
+            .name = entry.key_ptr.*,
+            .module = entry.value_ptr.*,
+        });
+    }
+    return try modules.toOwnedSlice(allocator);
 }
 
 /// List all dependencies of a given module.
 pub fn listModuleDependencies(module: *std.Build.Module) void {
     if (!builtin.is_test) {
-        const graph = module.getGraph();
-        std.debug.print("Module dependencies for {s}:\n", .{graph.names[0]});
         for (module.owner.available_deps) |dep| {
-            std.debug.print("  - {s}\n", .{dep.@"0"});
+            std.debug.print("\t- {s}\n", .{dep.@"0"});
         }
     }
 }
@@ -54,4 +81,16 @@ pub fn getFilesFromPath(allocator: std.mem.Allocator, b: *std.Build, path: std.B
         }
     }
     return files;
+}
+
+/// Check if the build is running in this project
+pub fn isSelf(b: *std.Build) bool {
+    // Return true if this build's `build.zig` is inside the builder's build_root
+    // If we can't find a build_root, fall back to true
+    if (b.build_root.path) |root| {
+        const my_build_zig = b.path("build.zig").getPath(b);
+        return std.mem.startsWith(u8, my_build_zig, root);
+    } else {
+        return true;
+    }
 }
