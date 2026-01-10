@@ -1,11 +1,16 @@
 const std = @import("std");
 const utils = @import("utils.zig");
+
+pub const Example = struct {
+    name: []const u8,
+    module: *std.Build.Module,
+};
 /// Recursively setup and add all examples found in the `examples/` directory
 ///
 /// Sets up the build step for each example found and one top-level step to run
 /// them all called `examples`.
-pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
-    if (utils.isSelf(b) == false) return;
+pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) []const Example {
+    if (utils.isSelf(b) == false) return &[_]Example{};
 
     var examples_step: ?*std.Build.Step = null;
     var iter = b.top_level_steps.iterator();
@@ -19,9 +24,10 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
     // Examples
     if (examples_step == null) examples_step = b.step("examples", "Run all examples");
 
-    var examples_dir = std.fs.openDirAbsolute(b.path("examples").getPath(b), .{ .iterate = true }) catch return;
+    var examples_dir = std.fs.openDirAbsolute(b.path("examples").getPath(b), .{ .iterate = true }) catch return &[_]Example{};
     defer examples_dir.close();
 
+    var modules_list = std.ArrayList(Example).initCapacity(b.allocator, 16) catch return &[_]Example{};
     var examples_iter = examples_dir.iterate();
     while (examples_iter.next() catch null) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".zig")) {
@@ -31,9 +37,7 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
             while (iter.next()) |step| {
                 if (std.mem.eql(u8, step.key_ptr.*, example_name)) {
                     // Example step already exists
-                    example_name = std.fmt.allocPrint(b.allocator, "{s}_example", .{example_name}) catch {
-                        std.debug.panic("Out of memory", .{});
-                    };
+                    example_name = std.fmt.allocPrint(b.allocator, "{s}_example", .{example_name}) catch break;
                     break;
                 }
             }
@@ -41,7 +45,7 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
             const example_path = std.fs.path.join(b.allocator, &.{ "examples", entry.name }) catch continue;
             defer b.allocator.free(example_path);
 
-            const example_mod = b.addModule(example_name, .{
+            const example_mod = b.createModule(.{
                 .root_source_file = b.path(example_path),
                 .target = target,
                 .optimize = optimize,
@@ -74,6 +78,12 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
             example_step.dependOn(&run_example.step);
 
             examples_step.?.dependOn(example_step);
+
+            modules_list.append(b.allocator, .{
+                .name = example_name,
+                .module = example_mod,
+            }) catch continue;
         }
     }
+    return modules_list.toOwnedSlice(b.allocator) catch &[_]Example{};
 }
