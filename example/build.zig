@@ -65,4 +65,8 @@ pub fn build(b: *std.Build) !void {
     _ = buildtools.examples.setupExamples(b, &.{
         .{ .name = "self", .module = mod },
     }, target, optimize);
+
+    // for (examples) |example| {
+    //     std.debug.print("Example: {s} in '{s}'\n", .{ example.name, example.path });
+    // }
 }

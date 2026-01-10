@@ -3,6 +3,7 @@ const utils = @import("utils.zig");
 
 pub const Example = struct {
     name: []const u8,
+    path: []const u8,
     module: *std.Build.Module,
 };
 /// Recursively setup and add all examples found in the `examples/` directory
@@ -43,7 +44,6 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
             }
 
             const example_path = std.fs.path.join(b.allocator, &.{ "examples", entry.name }) catch continue;
-            defer b.allocator.free(example_path);
 
             const example_mod = b.createModule(.{
                 .root_source_file = b.path(example_path),
@@ -81,6 +81,7 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
 
             modules_list.append(b.allocator, .{
                 .name = example_name,
+                .path = example_path,
                 .module = example_mod,
             }) catch continue;
         }
