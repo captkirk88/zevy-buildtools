@@ -11,8 +11,6 @@ pub const Example = struct {
 /// Sets up the build step for each example found and one top-level step to run
 /// them all called `examples`.
 pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) struct { step: *std.Build.Step, examples: []const Example } {
-    if (utils.isSelf(b) == false) return &[_]Example{};
-
     var examples_step: ?*std.Build.Step = null;
     var iter = b.top_level_steps.iterator();
     while (iter.next()) |step| {
@@ -25,10 +23,12 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
     // Examples
     if (examples_step == null) examples_step = b.step("examples", "Run all examples");
 
-    var examples_dir = std.fs.openDirAbsolute(b.path("examples").getPath(b), .{ .iterate = true }) catch return &[_]Example{};
+    if (utils.isSelf(b) == false) return .{ .step = examples_step.?, .examples = &[_]Example{} };
+
+    var examples_dir = std.fs.openDirAbsolute(b.path("examples").getPath(b), .{ .iterate = true }) catch return .{ .step = examples_step.?, .examples = &[_]Example{} };
     defer examples_dir.close();
 
-    var modules_list = std.ArrayList(Example).initCapacity(b.allocator, 16) catch return &[_]Example{};
+    var modules_list = std.ArrayList(Example).initCapacity(b.allocator, 16) catch return .{ .step = examples_step.?, .examples = &[_]Example{} };
     var examples_iter = examples_dir.iterate();
     while (examples_iter.next() catch null) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".zig")) {
