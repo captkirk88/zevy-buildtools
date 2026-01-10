@@ -191,7 +191,7 @@ pub fn createGetStep(b: *Build) *std.Build.Step {
 const permitted_domains = [_][]const u8{
     "github.com", // tested
     "gitlab.com", //untested
-    "codeberg.org", //untested
+    "codeberg.org", //tested
 };
 
 fn isPermittedDomain(url: []const u8) bool {

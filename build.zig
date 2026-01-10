@@ -67,6 +67,8 @@ pub fn build(b: *std.Build) void {
         error.ParseZon => @panic("Error parsing build.zig.zon for fetch step"),
     };
 
+    root.fetch.addGetStep(b);
+
     root.fmt.addFmtStep(b, true) catch |err| {
         @panic(@errorName(err));
     };

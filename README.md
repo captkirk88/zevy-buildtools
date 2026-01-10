@@ -36,6 +36,8 @@ zig build get -- <dependency-url>
 ```
 Internally invokes `zig build --save <dependency-url>`.
 
+You do not need to add `git+` prefix when specifying Github/Codeberg repositories; it is added automatically.
+
 #### List Dependencies
 List all current dependencies in your project:
 
