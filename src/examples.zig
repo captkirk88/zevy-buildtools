@@ -7,8 +7,17 @@ const utils = @import("utils.zig");
 pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
     if (utils.isSelf(b) == false) return;
 
+    var examples_step: ?*std.Build.Step = null;
+    var iter = b.top_level_steps.iterator();
+    while (iter.next()) |step| {
+        if (std.mem.eql(u8, step.key_ptr.*, "examples")) {
+            examples_step = &step.value_ptr.*.step;
+            break;
+        }
+    }
+
     // Examples
-    const examples_step = b.step("examples", "Run all examples");
+    if (examples_step == null) examples_step = b.step("examples", "Run all examples");
 
     var examples_dir = std.fs.openDirAbsolute(b.path("examples").getPath(b), .{ .iterate = true }) catch return;
     defer examples_dir.close();
@@ -16,7 +25,19 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
     var examples_iter = examples_dir.iterate();
     while (examples_iter.next() catch null) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".zig")) {
-            const example_name = std.fs.path.stem(entry.name);
+            var example_name = std.fs.path.stem(entry.name);
+
+            iter = b.top_level_steps.iterator();
+            while (iter.next()) |step| {
+                if (std.mem.eql(u8, step.key_ptr.*, example_name)) {
+                    // Example step already exists
+                    example_name = std.fmt.allocPrint(b.allocator, "{s}_example", .{example_name}) catch {
+                        std.debug.panic("Out of memory", .{});
+                    };
+                    break;
+                }
+            }
+
             const example_path = std.fs.path.join(b.allocator, &.{ "examples", entry.name }) catch continue;
             defer b.allocator.free(example_path);
 
@@ -48,10 +69,11 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
             if (b.args) |args| {
                 run_example.addArgs(args);
             }
+
             const example_step = b.step(example_name, b.fmt("Run the {s} example", .{example_name}));
             example_step.dependOn(&run_example.step);
 
-            examples_step.dependOn(example_step);
+            examples_step.?.dependOn(example_step);
         }
     }
 }
