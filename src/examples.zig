@@ -10,7 +10,7 @@ pub const Example = struct {
 ///
 /// Sets up the build step for each example found and one top-level step to run
 /// them all called `examples`.
-pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) []const Example {
+pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) struct { step: *std.Build.Step, examples: []const Example } {
     if (utils.isSelf(b) == false) return &[_]Example{};
 
     var examples_step: ?*std.Build.Step = null;
@@ -86,5 +86,8 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
             }) catch continue;
         }
     }
-    return modules_list.toOwnedSlice(b.allocator) catch &[_]Example{};
+    return .{
+        .step = examples_step.?,
+        .examples = modules_list.toOwnedSlice(b.allocator) catch &[_]Example{},
+    };
 }
