@@ -15,5 +15,5 @@ pub const utils = @import("utils.zig");
 pub const deps = @import("deps.zig");
 
 test {
-    std.testing.refAllDeclsRecursive(@This());
+    std.testing.refAllDecls(@This());
 }

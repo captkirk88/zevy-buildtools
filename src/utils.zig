@@ -62,15 +62,15 @@ pub fn listModuleDependencies(module: *std.Build.Module) void {
 }
 
 pub fn getFilesFromPath(allocator: std.mem.Allocator, b: *std.Build, path: std.Build.LazyPath) !std.ArrayList([]const u8) {
-    const fs = std.fs;
     const base_file_path = path.getPath(b);
-    var dir = fs.openDirAbsolute(base_file_path, .{ .iterate = true }) catch return std.ArrayList([]const u8).initCapacity(allocator, 0);
-    defer dir.close();
+    const io = b.graph.io;
+    var dir = std.Io.Dir.openDirAbsolute(io, base_file_path, .{ .iterate = true }) catch return std.ArrayList([]const u8).initCapacity(allocator, 0);
+    defer dir.close(io);
 
     var files = try std.ArrayList([]const u8).initCapacity(allocator, 16);
 
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
+    while (try iter.next(io)) |entry| {
         if (entry.kind == .file) {
             const full_path = try std.fs.path.join(allocator, &[_][]const u8{ base_file_path, entry.name });
             files.append(allocator, full_path) catch {

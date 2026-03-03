@@ -3,18 +3,13 @@
 
     .version = "0.0.0",
 
-    .fingerprint = 0xa563df37f1348f4a, // Changing this has security and trust implications.
+    .fingerprint = 0xa563df37fceb6d00, // Changing this has security and trust implications.
 
     .minimum_zig_version = "0.15.2",
     .dependencies = .{
-        .zevy_mem = .{
-            .url = "git+https://github.com/captkirk88/zevy-mem#b0fe95f58c03dab9f042542e3952400521e1d6bd",
-            .hash = "zevy_mem-0.0.1-jK9L0bHPAgCu_pDH7XYT70B9dYy5RHU0JWXCm8BeU1vM",
-        },
-        .zevy_reflect = .{
-            .url = "git+https://github.com/captkirk88/zevy-reflect#9a49829950b317dbb093022683c700269f8ce65c",
-            .hash = "zevy_reflect-0.1.0-8SzYxhqFAgAEG8Hf1KyKePXm8bdamb6f6MvtOW3WUh2z",
-        },
+        //        .zevy_reflect = .{
+        //            .path = "../zevy-reflect",
+        //        },
     },
 
     .paths = .{

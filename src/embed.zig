@@ -25,6 +25,7 @@ pub fn addEmbeddedAssetsModule(
     options: EmbedAssetsOptions,
 ) anyerror!*std.Build.Module {
     const allocator = b.allocator;
+    const io = b.graph.io;
 
     var asset_paths = try std.ArrayList([]const u8).initCapacity(allocator, 8);
     defer {
@@ -32,7 +33,7 @@ pub fn addEmbeddedAssetsModule(
         asset_paths.deinit(allocator);
     }
 
-    const assets_root_opt = try collectEmbeddedAssets(allocator, options, &asset_paths);
+    const assets_root_opt = try collectEmbeddedAssets(allocator, io, options, &asset_paths);
     defer if (assets_root_opt) |root| allocator.free(root);
 
     const generated_file = try writeEmbeddedModule(b, options, asset_paths.items, assets_root_opt);
@@ -50,10 +51,11 @@ pub fn addEmbeddedAssetsModule(
 
 fn collectEmbeddedAssets(
     allocator: std.mem.Allocator,
+    io: std.Io,
     options: EmbedAssetsOptions,
     asset_paths: *std.ArrayList([]const u8),
 ) anyerror!?[]const u8 {
-    var dir = std.fs.cwd().openDir(options.assets_dir, .{ .iterate = true, .access_sub_paths = true }) catch |err| switch (err) {
+    var dir = std.Io.Dir.cwd().openDir(io, options.assets_dir, .{ .iterate = true, .access_sub_paths = true }) catch |err| switch (err) {
         error.FileNotFound => {
             // If directory doesn't exist but we have additional files, that's still valid
             if (options.additional_files != null and options.additional_files.?.len > 0) {
@@ -63,15 +65,15 @@ fn collectEmbeddedAssets(
         },
         else => return err,
     };
-    defer dir.close();
+    defer dir.close(io);
 
-    const abs_dir = try std.fs.cwd().realpathAlloc(allocator, options.assets_dir);
+    const abs_dir = try std.Io.Dir.cwd().realpathAlloc(io, allocator, options.assets_dir);
     errdefer allocator.free(abs_dir);
 
     var path_buffer = std.ArrayListUnmanaged(u8){};
     defer path_buffer.deinit(allocator);
 
-    try walkEmbeddedAssets(allocator, &dir, &path_buffer, asset_paths, options.ignore_regex);
+    try walkEmbeddedAssets(allocator, io, &dir, &path_buffer, asset_paths, options.ignore_regex);
 
     // Add optional additional files
     if (options.additional_files) |additional| {
@@ -99,21 +101,22 @@ fn collectEmbeddedAssets(
 
 fn walkEmbeddedAssets(
     allocator: std.mem.Allocator,
-    dir: *std.fs.Dir,
+    io: std.Io,
+    dir: *std.Io.Dir,
     path_buffer: *std.ArrayList(u8),
     asset_paths: *std.ArrayList([]const u8),
     ignore_regex: ?[]const u8,
 ) anyerror!void {
     var iterator = dir.iterate();
-    while (try iterator.next()) |entry| {
+    while (try iterator.next(io)) |entry| {
         switch (entry.kind) {
             .directory => {
                 const original_len = path_buffer.items.len;
                 if (original_len != 0) try path_buffer.append(allocator, '/');
                 try path_buffer.appendSlice(allocator, entry.name);
-                var child = try dir.openDir(entry.name, .{ .iterate = true, .access_sub_paths = true });
-                defer child.close();
-                try walkEmbeddedAssets(allocator, &child, path_buffer, asset_paths, ignore_regex);
+                var child = try dir.openDir(io, entry.name, .{ .iterate = true, .access_sub_paths = true });
+                defer child.close(io);
+                try walkEmbeddedAssets(allocator, io, &child, path_buffer, asset_paths, ignore_regex);
                 path_buffer.shrinkRetainingCapacity(original_len);
             },
             .file => {

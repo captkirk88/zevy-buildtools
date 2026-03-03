@@ -2,37 +2,32 @@ const std = @import("std");
 
 /// Copy all files from a source folder to the build output directory.
 pub fn copyFolder(b: *std.Build, src: []const u8) !void {
-    const fs = std.fs;
     const allocator = b.allocator;
+    const io = b.graph.io;
 
-    var src_dir = try fs.cwd().openDir(b.path(src).cwd_relative, .{ .access_sub_paths = true, .iterate = true });
-    defer src_dir.close();
+    var src_dir = try std.Io.Dir.cwd().openDir(io, b.path(src).cwd_relative, .{ .access_sub_paths = true, .iterate = true });
+    defer src_dir.close(io);
     std.log.info("Copying assets from {s} to {s}", .{ b.path(src).cwd_relative, b.exe_dir });
-    try copyDirRecursive(src_dir, b.exe_dir, allocator);
+    try copyDirRecursive(io, src_dir, b.exe_dir, allocator);
 }
 
-fn copyDirRecursive(dir: std.fs.Dir, dest_root: []const u8, allocator: std.mem.Allocator) !void {
-    const fs = std.fs;
-
+fn copyDirRecursive(io: std.Io, dir: std.Io.Dir, dest_root: []const u8, allocator: std.mem.Allocator) !void {
     var iter = dir.iterate();
-    while (try iter.next()) |entry| {
-        const src_path = try std.fs.path.join(allocator, &[_][]const u8{ dest_root, entry.name });
-        defer allocator.free(src_path);
-
+    while (try iter.next(io)) |entry| {
         if (entry.kind == .file) {
             const dest_path = try std.fs.path.join(allocator, &[_][]const u8{ dest_root, entry.name });
             defer allocator.free(dest_path);
 
-            try fs.cwd().makePath(std.fs.path.dirname(dest_path) orelse ".");
-            var src_file = try dir.openFile(entry.name, .{ .mode = .read_only });
-            defer src_file.close();
-            const dest_file = try fs.cwd().createFile(dest_path, .{ .truncate = true });
-            defer dest_file.close();
+            try std.Io.Dir.cwd().createDirPath(io, std.fs.path.dirname(dest_path) orelse ".");
+            var src_file = try dir.openFile(io, entry.name, .{ .mode = .read_only });
+            defer src_file.close(io);
+            const dest_file = try std.Io.Dir.cwd().createFile(io, dest_path, .{ .truncate = true });
+            defer dest_file.close(io);
             var buffer: [4096]u8 = undefined;
             while (true) {
-                const bytes_read = try src_file.read(&buffer);
+                const bytes_read = try src_file.readStreaming(io, &.{buffer[0..]});
                 if (bytes_read == 0) break;
-                _ = try dest_file.write(buffer[0..bytes_read]);
+                try dest_file.writeStreamingAll(io, buffer[0..bytes_read]);
             }
         }
         // Ignore directories

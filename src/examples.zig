@@ -25,12 +25,13 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
 
     if (utils.isSelf(b) == false) return .{ .step = examples_step.?, .examples = &[_]Example{} };
 
-    var examples_dir = std.fs.openDirAbsolute(b.path("examples").getPath(b), .{ .iterate = true }) catch return .{ .step = examples_step.?, .examples = &[_]Example{} };
-    defer examples_dir.close();
+    const io = b.graph.io;
+    var examples_dir = std.Io.Dir.openDirAbsolute(io, b.path("examples").getPath(b), .{ .iterate = true }) catch return .{ .step = examples_step.?, .examples = &[_]Example{} };
+    defer examples_dir.close(io);
 
     var modules_list = std.ArrayList(Example).initCapacity(b.allocator, 16) catch return .{ .step = examples_step.?, .examples = &[_]Example{} };
     var examples_iter = examples_dir.iterate();
-    while (examples_iter.next() catch null) |entry| {
+    while (examples_iter.next(io) catch null) |entry| {
         if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".zig")) {
             var example_name = std.fs.path.stem(entry.name);
 

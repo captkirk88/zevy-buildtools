@@ -33,10 +33,8 @@ fn parseZonFile(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, ZonFile
     var deps = std.ArrayList(ParsedDependency).initCapacity(b.allocator, 8) catch return error.OutOfMemory;
 
     const zonPath = zon_path.getPath(b);
-    var file = std.fs.cwd().openFile(zonPath, .{}) catch return error.ZonFileReadError;
-    defer file.close();
-
-    const data = file.readToEndAlloc(b.allocator, 64 * 1024) catch return error.ZonFileReadError;
+    const io = b.graph.io;
+    const data = std.Io.Dir.cwd().readFileAlloc(io, zonPath, b.allocator, .limited(64 * 1024)) catch return error.ZonFileReadError;
     defer b.allocator.free(data);
 
     // Ensure null-terminated source for the parser
@@ -63,7 +61,7 @@ fn parseZonFile(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, ZonFile
 
     const root = std.zon.parse.fromSlice(Root, b.allocator, src, &diag, .{}) catch |err| {
         // print diagnostics into an allocating writer and emit via debug
-        var aw: std.io.Writer.Allocating = .init(b.allocator);
+        var aw: std.Io.Writer.Allocating = .init(b.allocator);
         diag.format(&aw.writer) catch {};
         const out = aw.toOwnedSlice() catch |err2| {
             aw.deinit();
@@ -91,7 +89,7 @@ fn parseZonFile(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, ZonFile
 
                 while (di < deps_fields.names.len) {
                     const val_node = deps_fields.vals.at(@intCast(di));
-                    const entry = try std.zon.parse.fromZoirNode(DepEntry, b.allocator, diag.ast, diag.zoir, val_node, null, .{});
+                    const entry = try std.zon.parse.fromZoirNodeAlloc(DepEntry, b.allocator, diag.ast, diag.zoir, val_node, null, .{});
 
                     const ignored = if (entry.ignore) |v| v else false;
                     if (!ignored) {
@@ -129,13 +127,11 @@ pub fn createFetchStep(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, 
 
     // Try to open the zon file. If it doesn't exist, return ZonNotFound.
     const zonPath = zon_path.getPath(b);
-    var file = std.fs.cwd().openFile(zonPath, .{}) catch |err| switch (err) {
+    const io = b.graph.io;
+    const data = std.Io.Dir.cwd().readFileAlloc(io, zonPath, b.allocator, .limited(16 * 1024)) catch |err| switch (err) {
         error.FileNotFound => return error.ZonNotFound,
         else => return error.ZonFileReadError,
     };
-    defer file.close();
-
-    const data = file.readToEndAlloc(b.allocator, 16 * 1024) catch return error.ZonFileReadError;
     defer b.allocator.free(data);
 
     // Use the helper parser above to get parsed dependencies
@@ -217,36 +213,56 @@ fn makeGetStep(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void
 
     const argv = [_][]const u8{ "zig", "fetch", "--save", modified_url };
 
-    var child = std.process.Child.init(&argv, b.allocator);
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
+    const io = b.graph.io;
+    var child = try std.process.spawn(io, .{
+        .argv = &argv,
+        .stdin = .inherit,
+        .stdout = .pipe,
+        .stderr = .pipe,
+    });
+    defer {
+        if (child.stdout) |stdout| stdout.close(io);
+        if (child.stderr) |stderr| stderr.close(io);
+    }
 
-    const result = try child.spawnAndWait();
+    var stdout_list = std.ArrayList(u8).initCapacity(b.allocator, 0) catch return error.OutOfMemory;
+    defer stdout_list.deinit(b.allocator);
+    var stderr_list = std.ArrayList(u8).initCapacity(b.allocator, 0) catch return error.OutOfMemory;
+    defer stderr_list.deinit(b.allocator);
 
-    // Read and print stdout
     if (child.stdout) |stdout| {
-        var stdout_data = try b.allocator.alloc(u8, 1024 * 1024);
-        defer b.allocator.free(stdout_data);
-        const n = try stdout.readAll(stdout_data);
-        if (n > 0) {
-            std.debug.print("{s}", .{stdout_data[0..n]});
+        var buf: [1024]u8 = undefined;
+        var reader = stdout.reader(io, &buf).interface;
+        while (true) {
+            const n = try reader.readAlloc(std.heap.page_allocator, 1024);
+            if (n.len == 0) {
+                break;
+            }
+            try stdout_list.appendSlice(b.allocator, n);
+            std.heap.page_allocator.free(n);
         }
     }
+    const term = try child.wait(io);
 
-    // Read and print stderr
-    if (child.stderr) |stderr| {
-        var stderr_data = try b.allocator.alloc(u8, 1024 * 1024);
-        defer b.allocator.free(stderr_data);
-        const n = try stderr.readAll(stderr_data);
-        if (n > 0) {
-            std.debug.print("{s}", .{stderr_data[0..n]});
-        }
+    if (stdout_list.items.len > 0) {
+        std.debug.print("{s}", .{stdout_list.items});
+    }
+    if (stderr_list.items.len > 0) {
+        std.debug.print("{s}", .{stderr_list.items});
     }
 
-    if (result != .Exited or result.Exited != 0) {
-        std.debug.print("zig fetch failed\n", .{});
-        return error.FetchFailed;
+    switch (term) {
+        .exited => |code| if (code != 0) {
+            std.debug.print("zig fetch failed\n", .{});
+            return error.FetchFailed;
+        },
+        else => {
+            std.debug.print("zig fetch failed\n", .{});
+            return error.FetchFailed;
+        },
     }
+
+    return;
 }
 
 /// Convenience wrapper that creates the get step and registers a
@@ -254,7 +270,7 @@ fn makeGetStep(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void
 ///
 /// Requires args to be passed to the build system when invoking `zig build get -- <url>`.
 pub fn addGetStep(b: *Build) void {
-    if (utils.isSelf(b) == false) std.debug.panic("get step ran for non-self build: {s}", .{b.build_root.path orelse "."});
+    if (utils.isSelf(b) == false) return;
     const step = createGetStep(b);
     const top = b.step("get", "Fetch a specific dependency");
     top.dependOn(step);
