@@ -2,7 +2,6 @@ const std = @import("std");
 const Build = std.Build;
 const zon = std.zon;
 const utils = @import("utils.zig");
-const builtin = @import("builtin");
 
 pub const ParsedDependency = struct {
     url: []const u8,
@@ -116,6 +115,9 @@ fn parseZonFile(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, ZonFile
 /// `build.zig.zon`. This function *does not* register a top-level step; it
 /// only creates and returns the Run step and its dependent fetch tasks. The
 /// caller can decide to attach this Run to a top-level `fetch` step if desired.
+///
+/// If `b.args` is non-empty (e.g. `zig build fetch -- https://...`), those
+/// URLs are fetched directly and the zon file is not parsed.
 pub fn createFetchStep(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, ZonNotFound, ZonFileReadError, ParseZon }!*std.Build.Step {
     const container = b.allocator.create(std.Build.Step) catch @panic("OOM");
     container.* = std.Build.Step.init(.{
@@ -125,7 +127,33 @@ pub fn createFetchStep(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, 
         .makeFn = makeFetchStep,
     });
 
-    // Try to open the zon file. If it doesn't exist, return ZonNotFound.
+    // If URLs were passed on the command line (`zig build fetch -- url ...`),
+    // fetch those directly without touching the zon file.
+    if (b.args) |args| {
+        if (args.len > 0) {
+            for (args) |url| {
+                // Apply the same git+ prefix logic as `addGetStep`.
+                const effective_url = if (std.mem.endsWith(u8, url, ".tar.gz"))
+                    url
+                else if (isPermittedDomain(url))
+                    b.fmt("git+{s}", .{url})
+                else
+                    url;
+                const name = b.fmt("fetch: {s}", .{effective_url});
+                const run = std.Build.Step.Run.create(b, name);
+                run.addArg("zig");
+                run.addArg("fetch");
+                run.addArg("--save");
+                run.addArg(effective_url);
+                run.stdio = .inherit;
+                run.has_side_effects = true;
+                container.dependOn(&run.step);
+            }
+            return container;
+        }
+    }
+
+    // No args: parse the zon file and fetch every non-ignored URL.
     const zonPath = zon_path.getPath(b);
     const io = b.graph.io;
     const data = std.Io.Dir.cwd().readFileAlloc(io, zonPath, b.allocator, .limited(16 * 1024)) catch |err| switch (err) {
@@ -134,11 +162,9 @@ pub fn createFetchStep(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, 
     };
     defer b.allocator.free(data);
 
-    // Use the helper parser above to get parsed dependencies
     var deps = parseZonFile(b, zon_path) catch |err| return err;
     defer deps.deinit(b.allocator);
 
-    var i: usize = 0;
     for (deps.items) |d| {
         const name = b.fmt("fetch: {s}", .{d.url});
         const run = std.Build.Step.Run.create(b, name);
@@ -148,8 +174,7 @@ pub fn createFetchStep(b: *Build, zon_path: Build.LazyPath) error{ OutOfMemory, 
         run.addArg(d.url);
         run.stdio = .inherit;
         run.has_side_effects = true;
-        std.Build.Step.dependOn(container, &run.step);
-        i += 1;
+        container.dependOn(&run.step);
     }
 
     return container;
@@ -217,39 +242,10 @@ fn makeGetStep(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void
     var child = try std.process.spawn(io, .{
         .argv = &argv,
         .stdin = .inherit,
-        .stdout = .pipe,
-        .stderr = .pipe,
+        .stdout = .inherit,
+        .stderr = .inherit,
     });
-    defer {
-        if (child.stdout) |stdout| stdout.close(io);
-        if (child.stderr) |stderr| stderr.close(io);
-    }
-
-    var stdout_list = std.ArrayList(u8).initCapacity(b.allocator, 0) catch return error.OutOfMemory;
-    defer stdout_list.deinit(b.allocator);
-    var stderr_list = std.ArrayList(u8).initCapacity(b.allocator, 0) catch return error.OutOfMemory;
-    defer stderr_list.deinit(b.allocator);
-
-    if (child.stdout) |stdout| {
-        var buf: [1024]u8 = undefined;
-        var reader = stdout.reader(io, &buf).interface;
-        while (true) {
-            const n = try reader.readAlloc(std.heap.page_allocator, 1024);
-            if (n.len == 0) {
-                break;
-            }
-            try stdout_list.appendSlice(b.allocator, n);
-            std.heap.page_allocator.free(n);
-        }
-    }
     const term = try child.wait(io);
-
-    if (stdout_list.items.len > 0) {
-        std.debug.print("{s}", .{stdout_list.items});
-    }
-    if (stderr_list.items.len > 0) {
-        std.debug.print("{s}", .{stderr_list.items});
-    }
 
     switch (term) {
         .exited => |code| if (code != 0) {
@@ -261,8 +257,6 @@ fn makeGetStep(step: *std.Build.Step, options: std.Build.Step.MakeOptions) !void
             return error.FetchFailed;
         },
     }
-
-    return;
 }
 
 /// Convenience wrapper that creates the get step and registers a

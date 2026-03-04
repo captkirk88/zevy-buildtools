@@ -1,6 +1,6 @@
 .**/*
 .zig-cache/
 zig-out/
-
+zig-pkg/
 example-mixin/
 generated/
