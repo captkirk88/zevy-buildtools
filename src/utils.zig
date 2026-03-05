@@ -1,16 +1,68 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-/// List all build dependencies.
+/// List all build dependencies recursively as a tree.
 pub fn listBuildDependencies(b: *std.Build) void {
+    var visited = std.StringHashMap(void).init(b.allocator);
+    defer visited.deinit();
+
     const deps = getBuildDependencies(b) catch return;
     for (deps) |dep| {
-        std.debug.print("{s}\n", .{dep});
-        const mod_deps = getDependencyModules(b.dependency(dep, .{})) catch continue;
-        for (mod_deps) |module| {
-            listModuleDependencies(module.module);
-        }
+        listBuildDependenciesRecursive(b, dep, 0, &visited) catch continue;
     }
+}
+
+/// Recursively list dependencies with tree formatting.
+fn listBuildDependenciesRecursive(
+    b: *std.Build,
+    dep_name: []const u8,
+    depth: usize,
+    visited: *std.StringHashMap(void),
+) !void {
+    // Check if already visited to avoid cycles
+    if (visited.contains(dep_name)) {
+        printIndent(depth);
+        std.debug.print("- {s} (circular)\n", .{dep_name});
+        return;
+    }
+
+    try visited.put(dep_name, {});
+
+    // Print current dependency with tree formatting
+    if (depth == 0) {
+        std.debug.print("{s}\n", .{dep_name});
+    } else {
+        printIndent(depth);
+        std.debug.print("- {s}\n", .{dep_name});
+    }
+
+    // Get sub-dependencies
+    const dependency = b.dependency(dep_name, .{});
+    const sub_deps = getBuildDependenciesFromDependency(dependency) catch return;
+
+    for (sub_deps) |sub_dep| {
+        try listBuildDependenciesRecursive(b, sub_dep, depth + 1, visited);
+    }
+}
+
+/// Print indentation for tree formatting.
+fn printIndent(depth: usize) void {
+    for (0..depth) |_| {
+        std.debug.print("  ", .{});
+    }
+}
+
+/// Get dependencies from a specific dependency.
+fn getBuildDependenciesFromDependency(dep: *std.Build.Dependency) ![]const []const u8 {
+    const allocator = dep.builder.allocator;
+    const available = dep.builder.available_deps;
+    var deps = try std.ArrayList([]const u8).initCapacity(allocator, available.len);
+
+    for (dep.builder.available_deps) |depid| {
+        try deps.append(allocator, depid.@"0");
+    }
+
+    return try deps.toOwnedSlice(allocator);
 }
 
 pub fn getBuildDependencies(b: *std.Build) error{OutOfMemory}![]const []const u8 {
