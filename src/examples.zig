@@ -5,7 +5,42 @@ pub const Example = struct {
     name: []const u8,
     path: []const u8,
     module: *std.Build.Module,
+    step: *std.Build.Step,
 };
+
+pub fn setupExample(b: *std.Build, name: []const u8, path: []const u8, modules: []const std.Build.Module.Import, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) !Example {
+    const example_mod = b.createModule(.{
+        .root_source_file = b.path(path),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    for (modules) |module| {
+        example_mod.addImport(module.name, module.module);
+    }
+
+    const example_exe = b.addExecutable(.{
+        .name = name,
+        .root_module = example_mod,
+    });
+
+    const run_example = b.addRunArtifact(example_exe);
+
+    if (b.args) |args| {
+        run_example.addArgs(args);
+    }
+
+    const example_step = b.step(name, b.fmt("Run the {s} example", .{name}));
+    example_step.dependOn(&run_example.step);
+
+    return .{
+        .name = name,
+        .path = path,
+        .module = example_mod,
+        .step = example_step,
+    };
+}
+
 /// Recursively setup and add all examples found in the `examples/` directory
 ///
 /// Sets up the build step for each example found and one top-level step to run
@@ -45,46 +80,9 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
             }
 
             const example_path = std.fs.path.join(b.allocator, &.{ "examples", entry.name }) catch continue;
-
-            const example_mod = b.createModule(.{
-                .root_source_file = b.path(example_path),
-                .target = target,
-                .optimize = optimize,
-            });
-
-            // Add imports from the first module if any
-            if (modules.len > 0) {
-                for (modules) |module| {
-                    example_mod.addImport(module.name, module.module);
-                }
-            }
-
-            // Add each module
-            for (modules) |item| {
-                example_mod.addImport(item.name, item.module);
-            }
-
-            const example_exe = b.addExecutable(.{
-                .name = example_name,
-                .root_module = example_mod,
-            });
-
-            const run_example = b.addRunArtifact(example_exe);
-
-            if (b.args) |args| {
-                run_example.addArgs(args);
-            }
-
-            const example_step = b.step(example_name, b.fmt("Run the {s} example", .{example_name}));
-            example_step.dependOn(&run_example.step);
-
-            examples_step.?.dependOn(example_step);
-
-            modules_list.append(b.allocator, .{
-                .name = example_name,
-                .path = example_path,
-                .module = example_mod,
-            }) catch continue;
+            const example = setupExample(b, example_name, example_path, modules, target, optimize) catch continue;
+            examples_step.?.dependOn(example.step);
+            modules_list.append(b.allocator, example) catch continue;
         }
     }
     return .{

@@ -62,11 +62,7 @@ pub fn build(b: *std.Build) !void {
     // Adds `zig build deps`
     try buildtools.deps.addDepsStep(b);
 
-    _ = buildtools.examples.setupExamples(b, &.{
+    _ = try buildtools.examples.setupExample(b, "testA", "examples/testA.zig", &.{
         .{ .name = "self", .module = mod },
-    }, target, optimize);
-
-    // for (examples) |example| {
-    //     std.debug.print("Example: {s} in '{s}'\n", .{ example.name, example.path });
-    // }
+    }, target, .ReleaseFast);
 }
