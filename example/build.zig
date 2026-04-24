@@ -65,4 +65,8 @@ pub fn build(b: *std.Build) !void {
     _ = try buildtools.examples.setupExample(b, "testA", "examples/testA.zig", &.{
         .{ .name = "self", .module = mod },
     }, target, .ReleaseFast);
+
+    _ = try buildtools.embed.addEmbeddedAssetsModule(b, target, optimize, exe.root_module, .{
+        .assets_dir = "embeds/",
+    });
 }
