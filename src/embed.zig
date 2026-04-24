@@ -67,10 +67,10 @@ fn collectEmbeddedAssets(
     };
     defer dir.close(io);
 
-    const abs_dir = try std.Io.Dir.cwd().realpathAlloc(io, allocator, options.assets_dir);
+    const abs_dir = try std.Io.Dir.cwd().realPathFileAlloc(io, options.assets_dir, allocator);
     errdefer allocator.free(abs_dir);
 
-    var path_buffer = std.ArrayListUnmanaged(u8){};
+    var path_buffer: std.ArrayListUnmanaged(u8) = .empty;
     defer path_buffer.deinit(allocator);
 
     try walkEmbeddedAssets(allocator, io, &dir, &path_buffer, asset_paths, options.ignore_regex);
@@ -187,10 +187,10 @@ fn writeEmbeddedModule(
         @panic("embedded assets root missing but files discovered");
     }
 
-    var buffer = std.ArrayListUnmanaged(u8){};
+    var buffer: std.ArrayList(u8) = .empty;
     defer buffer.deinit(allocator);
 
-    var embed_paths = std.ArrayListUnmanaged([]const u8){};
+    var embed_paths: std.ArrayListUnmanaged([]const u8) = .empty;
     defer {
         for (embed_paths.items) |path| allocator.free(path);
         embed_paths.deinit(allocator);
