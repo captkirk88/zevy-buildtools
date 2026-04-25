@@ -74,7 +74,7 @@ pub fn setupExamples(b: *std.Build, modules: []const std.Build.Module.Import, ta
             while (iter.next()) |step| {
                 if (std.mem.eql(u8, step.key_ptr.*, example_name)) {
                     // Example step already exists
-                    example_name = std.fmt.allocPrint(b.allocator, "{s}_example", .{example_name}) catch break;
+                    example_name = std.fmt.allocPrint(b.allocator, "{s}-example", .{example_name}) catch break;
                     break;
                 }
             }

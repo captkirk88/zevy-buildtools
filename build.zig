@@ -9,6 +9,7 @@ pub const embed = root.embed;
 pub const copy = root.copy;
 pub const utils = root.utils;
 pub const deps = root.deps;
+pub const prebuild = root.prebuild;
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});

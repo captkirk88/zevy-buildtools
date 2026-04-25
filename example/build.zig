@@ -7,12 +7,37 @@ const buildtools = @import("zevy_buildtools");
 // for defining build steps and express dependencies between them, allowing the
 // build runner to parallelize the build automatically (and the cache system to
 // know when a step doesn't need to be re-run).
+
+// ── Prebuild macro: @greeting("Name") → "Hello, Name!" (project-specific) ──
+fn expandGreeting(_: std.Io, allocator: std.mem.Allocator, args: []const u8) anyerror![]u8 {
+    const trimmed = std.mem.trim(u8, args, " \t\"");
+    return std.fmt.allocPrint(allocator, "\"Hello, {s}!\"", .{trimmed});
+}
+
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // ── Prebuild step ────────────────────────────────────────────────────────
+    // Mix built-in macros from buildtools.prebuild.builtins with any
+    // project-specific ones defined right here in build.zig.
+    const pre = try buildtools.prebuild.addPrebuildStep(b, .{
+        .src_dir = "src",
+        .macros = &.{
+            // Built-in: @buildTimestamp() → ISO-8601 UTC string literal
+            buildtools.prebuild.builtins.build_timestamp,
+            // Built-in: @envVar(NAME) → env var as string literal / @compileError
+            buildtools.prebuild.builtins.env_var,
+            // Built-in (parameterised): @buildMode() → optimize tag string
+            buildtools.prebuild.builtins.buildModeExpander(optimize),
+            // Project-specific: @greeting("Name") → "Hello, Name!"
+            .{ .name = "greeting", .expand = expandGreeting },
+        },
+    });
+
+    // Use the expanded root.zig produced by the prebuild step.
     const mod = b.addModule("example", .{
-        .root_source_file = b.path("src/root.zig"),
+        .root_source_file = pre.file(b, "root.zig"),
         .target = target,
     });
 

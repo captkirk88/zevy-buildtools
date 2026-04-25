@@ -14,6 +14,9 @@ pub const utils = @import("utils.zig");
 
 pub const deps = @import("deps.zig");
 
+pub const prebuild = @import("prebuild/root.zig");
+
 test {
     std.testing.refAllDecls(@This());
+    std.testing.refAllDecls(prebuild);
 }
