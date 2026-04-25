@@ -2,6 +2,9 @@ const std = @import("std");
 const macro_mod = @import("macro.zig");
 pub const MacroDefinition = macro_mod.MacroDefinition;
 pub const MacroFn = macro_mod.MacroFn;
+pub const MacroContext = macro_mod.MacroContext;
+pub const CodeBuilder = macro_mod.CodeBuilder;
+pub const moduleDefinition = macro_mod.moduleDefinition;
 
 /// Ready-to-use `MacroDefinition` values shipped with zevy-buildtools.
 /// Include any of these directly in your `PrebuildOptions.macros` slice.
@@ -40,7 +43,7 @@ pub const PrebuildResult = struct {
 ///
 /// All `.zig` files under `options.src_dir` are scanned.  Any `@macroName(...)`
 /// call whose name matches a registered `MacroDefinition` is replaced by the
-/// string returned from that definition's `expand` function.  The results are
+/// code written by that definition's `expand` function.  The results are
 /// written through a `WriteFile` build step so that Zig's cache system tracks
 /// them automatically.
 ///
@@ -267,7 +270,16 @@ fn tryExpandMacro(
         const close = try findMatchingParen(source, after_name);
         const args = source[after_name + 1 .. close];
 
-        const replacement = try macro.expand(io, allocator, args);
+        var code = CodeBuilder.init(allocator);
+        defer code.deinit();
+
+        try macro.expand(&code, .{
+            .io = io,
+            .allocator = allocator,
+            .args = args,
+        });
+
+        const replacement = try code.toOwnedSlice();
         defer allocator.free(replacement);
         try out.appendSlice(allocator, replacement);
         return close + 1;
@@ -349,8 +361,8 @@ test "expandMacros: simple substitution" {
     const macros = [_]MacroDefinition{.{
         .name = "hello",
         .expand = struct {
-            fn f(_: std.Io, alloc: std.mem.Allocator, _: []const u8) anyerror![]u8 {
-                return alloc.dupe(u8, "\"world\"");
+            fn f(code: *CodeBuilder, _: MacroContext) anyerror!void {
+                try code.stringLiteral("world");
             }
         }.f,
     }};
@@ -363,8 +375,9 @@ test "expandMacros: args passed to expand function" {
     const macros = [_]MacroDefinition{.{
         .name = "rep",
         .expand = struct {
-            fn f(_: std.Io, alloc: std.mem.Allocator, args: []const u8) anyerror![]u8 {
-                return std.fmt.allocPrint(alloc, "{s}{s}", .{ args, args });
+            fn f(code: *CodeBuilder, context: MacroContext) anyerror!void {
+                try code.raw(context.args);
+                try code.raw(context.args);
             }
         }.f,
     }};
@@ -377,7 +390,7 @@ test "expandMacros: skips line comments" {
     const macros = [_]MacroDefinition{.{
         .name = "boom",
         .expand = struct {
-            fn f(_: std.Io, _: std.mem.Allocator, _: []const u8) anyerror![]u8 {
+            fn f(_: *CodeBuilder, _: MacroContext) anyerror!void {
                 return error.ShouldNotExpand;
             }
         }.f,
@@ -392,7 +405,7 @@ test "expandMacros: skips string literals" {
     const macros = [_]MacroDefinition{.{
         .name = "boom",
         .expand = struct {
-            fn f(_: std.Io, _: std.mem.Allocator, _: []const u8) anyerror![]u8 {
+            fn f(_: *CodeBuilder, _: MacroContext) anyerror!void {
                 return error.ShouldNotExpand;
             }
         }.f,
@@ -407,7 +420,7 @@ test "expandMacros: skips multiline string literals" {
     const macros = [_]MacroDefinition{.{
         .name = "boom",
         .expand = struct {
-            fn f(_: std.Io, _: std.mem.Allocator, _: []const u8) anyerror![]u8 {
+            fn f(_: *CodeBuilder, _: MacroContext) anyerror!void {
                 return error.ShouldNotExpand;
             }
         }.f,
@@ -422,8 +435,8 @@ test "expandMacros: does not match name prefix of longer identifier" {
     const macros = [_]MacroDefinition{.{
         .name = "foo",
         .expand = struct {
-            fn f(_: std.Io, alloc: std.mem.Allocator, _: []const u8) anyerror![]u8 {
-                return alloc.dupe(u8, "EXPANDED");
+            fn f(code: *CodeBuilder, _: MacroContext) anyerror!void {
+                try code.raw("EXPANDED");
             }
         }.f,
     }};
@@ -439,16 +452,16 @@ test "expandMacros: multiple macros expanded in order" {
         .{
             .name = "a",
             .expand = struct {
-                fn f(_: std.Io, alloc: std.mem.Allocator, _: []const u8) anyerror![]u8 {
-                    return alloc.dupe(u8, "1");
+                fn f(code: *CodeBuilder, _: MacroContext) anyerror!void {
+                    try code.raw("1");
                 }
             }.f,
         },
         .{
             .name = "b",
             .expand = struct {
-                fn f(_: std.Io, alloc: std.mem.Allocator, _: []const u8) anyerror![]u8 {
-                    return alloc.dupe(u8, "2");
+                fn f(code: *CodeBuilder, _: MacroContext) anyerror!void {
+                    try code.raw("2");
                 }
             }.f,
         },
@@ -462,12 +475,58 @@ test "expandMacros: nested parens in args" {
     const macros = [_]MacroDefinition{.{
         .name = "wrap",
         .expand = struct {
-            fn f(_: std.Io, alloc: std.mem.Allocator, args: []const u8) anyerror![]u8 {
-                return std.fmt.allocPrint(alloc, "({s})", .{args});
+            fn f(code: *CodeBuilder, context: MacroContext) anyerror!void {
+                try code.raw("(");
+                try code.raw(context.args);
+                try code.raw(")");
             }
         }.f,
     }};
     const result = try expandMacros(std.testing.io, std.testing.allocator, "@wrap(foo(1, 2))", &macros);
     defer std.testing.allocator.free(result);
     try std.testing.expectEqualStrings("(foo(1, 2))", result);
+}
+
+test "expandMacros: code builder escapes string literals" {
+    const macros = [_]MacroDefinition{.{
+        .name = "quoted",
+        .expand = struct {
+            fn f(code: *CodeBuilder, _: MacroContext) anyerror!void {
+                try code.stringLiteral("line 1\n\"quoted\"");
+            }
+        }.f,
+    }};
+    const result = try expandMacros(std.testing.io, std.testing.allocator, "const s = @quoted();", &macros);
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("const s = \"line 1\\n\\\"quoted\\\"\";", result);
+}
+
+test "expandMacros: code builder imports raw file" {
+    const macros = [_]MacroDefinition{.{
+        .name = "fromFile",
+        .expand = struct {
+            fn f(code: *CodeBuilder, context: MacroContext) anyerror!void {
+                try code.file(context, "test_data/prebuild/raw_expr.zig");
+            }
+        }.f,
+    }};
+    const result = try expandMacros(std.testing.io, std.testing.allocator, "@fromFile()", &macros);
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("pub const fragment = \"raw file macro\";\n", result);
+}
+
+test "expandMacros: module-backed macro definition" {
+    const impl = struct {
+        pub fn main(code: *CodeBuilder, _: MacroContext) !void {
+            try code.stringLiteral("module-backed macro");
+        }
+    };
+    const result = try expandMacros(
+        std.testing.io,
+        std.testing.allocator,
+        "const x = @fromModule();",
+        &.{moduleDefinition("fromModule", impl)},
+    );
+    defer std.testing.allocator.free(result);
+    try std.testing.expectEqualStrings("const x = \"module-backed macro\";", result);
 }

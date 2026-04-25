@@ -1,6 +1,8 @@
 const std = @import("std");
 const macro_mod = @import("macro.zig");
 const MacroDefinition = macro_mod.MacroDefinition;
+const MacroContext = macro_mod.MacroContext;
+const CodeBuilder = macro_mod.CodeBuilder;
 
 // ── @buildTimestamp() ────────────────────────────────────────────────────────
 
@@ -11,15 +13,15 @@ pub const build_timestamp: MacroDefinition = .{
     .expand = expandBuildTimestamp,
 };
 
-fn expandBuildTimestamp(io: std.Io, allocator: std.mem.Allocator, _: []const u8) anyerror![]u8 {
-    const ts = std.Io.Timestamp.now(io, std.Io.Clock.real);
+fn expandBuildTimestamp(code: *CodeBuilder, context: MacroContext) anyerror!void {
+    const ts = std.Io.Timestamp.now(context.io, std.Io.Clock.real);
     const epoch_s = std.time.epoch.EpochSeconds{ .secs = @intCast(@max(0, ts.toSeconds())) };
     const year_day = epoch_s.getEpochDay().calculateYearDay();
     const month_day = year_day.calculateMonthDay();
     const day_secs = epoch_s.getDaySeconds();
-    return std.fmt.allocPrint(
-        allocator,
-        "\"{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}Z\"",
+    const rendered = try std.fmt.allocPrint(
+        context.allocator,
+        "{d:0>4}-{d:0>2}-{d:0>2}T{d:0>2}:{d:0>2}:{d:0>2}Z",
         .{
             year_day.year,
             month_day.month.numeric(),
@@ -29,6 +31,8 @@ fn expandBuildTimestamp(io: std.Io, allocator: std.mem.Allocator, _: []const u8)
             day_secs.getSecondsIntoMinute(),
         },
     );
+    defer context.allocator.free(rendered);
+    try code.stringLiteral(rendered);
 }
 
 // ── @envVar(NAME) ────────────────────────────────────────────────────────────
@@ -41,33 +45,21 @@ pub const env_var: MacroDefinition = .{
     .expand = expandEnvVar,
 };
 
-fn expandEnvVar(_: std.Io, allocator: std.mem.Allocator, args: []const u8) anyerror![]u8 {
-    const name = std.mem.trim(u8, args, " \t\"");
+fn expandEnvVar(code: *CodeBuilder, context: MacroContext) anyerror!void {
+    const name = std.mem.trim(u8, context.args, " \t\"");
     const block = std.process.Environ.GlobalBlock.global;
     const environ = std.process.Environ{ .block = block };
-    const value = std.process.Environ.getAlloc(environ, allocator, name) catch |err| switch (err) {
-        error.EnvironmentVariableMissing => return std.fmt.allocPrint(
-            allocator,
-            "@compileError(\"prebuild: environment variable '{s}' is not set\")",
-            .{name},
-        ),
+    const value = std.process.Environ.getAlloc(environ, context.allocator, name) catch |err| switch (err) {
+        error.EnvironmentVariableMissing => {
+            const message = try std.fmt.allocPrint(context.allocator, "prebuild: environment variable '{s}' is not set", .{name});
+            defer context.allocator.free(message);
+            try code.compileError(message);
+            return;
+        },
         else => return err,
     };
-    defer allocator.free(value);
-    // Escape backslashes and double-quotes inside the value.
-    var buf: std.ArrayList(u8) = .empty;
-    try buf.append(allocator, '"');
-    for (value) |c| {
-        switch (c) {
-            '\\' => try buf.appendSlice(allocator, "\\\\"),
-            '"' => try buf.appendSlice(allocator, "\\\""),
-            '\n' => try buf.appendSlice(allocator, "\\n"),
-            '\r' => try buf.appendSlice(allocator, "\\r"),
-            else => try buf.append(allocator, c),
-        }
-    }
-    try buf.append(allocator, '"');
-    return buf.toOwnedSlice(allocator);
+    defer context.allocator.free(value);
+    try code.stringLiteral(value);
 }
 
 // ── @buildMode() ─────────────────────────────────────────────────────────────
@@ -82,25 +74,25 @@ fn expandEnvVar(_: std.Io, allocator: std.mem.Allocator, args: []const u8) anyer
 /// Because `MacroFn` is stateless, use `buildModeExpander` to capture the
 /// optimize value and return a ready-to-register `MacroDefinition`.
 pub fn buildModeExpander(optimize: std.builtin.OptimizeMode) MacroDefinition {
-    const tag: *const fn (std.Io, std.mem.Allocator, []const u8) anyerror![]u8 = switch (optimize) {
+    const tag: *const fn (*CodeBuilder, MacroContext) anyerror!void = switch (optimize) {
         .Debug => struct {
-            fn f(_: std.Io, a: std.mem.Allocator, _: []const u8) anyerror![]u8 {
-                return a.dupe(u8, "\"Debug\"");
+            fn f(code: *CodeBuilder, _: MacroContext) anyerror!void {
+                try code.stringLiteral("Debug");
             }
         }.f,
         .ReleaseSafe => struct {
-            fn f(_: std.Io, a: std.mem.Allocator, _: []const u8) anyerror![]u8 {
-                return a.dupe(u8, "\"ReleaseSafe\"");
+            fn f(code: *CodeBuilder, _: MacroContext) anyerror!void {
+                try code.stringLiteral("ReleaseSafe");
             }
         }.f,
         .ReleaseSmall => struct {
-            fn f(_: std.Io, a: std.mem.Allocator, _: []const u8) anyerror![]u8 {
-                return a.dupe(u8, "\"ReleaseSmall\"");
+            fn f(code: *CodeBuilder, _: MacroContext) anyerror!void {
+                try code.stringLiteral("ReleaseSmall");
             }
         }.f,
         .ReleaseFast => struct {
-            fn f(_: std.Io, a: std.mem.Allocator, _: []const u8) anyerror![]u8 {
-                return a.dupe(u8, "\"ReleaseFast\"");
+            fn f(code: *CodeBuilder, _: MacroContext) anyerror!void {
+                try code.stringLiteral("ReleaseFast");
             }
         }.f,
     };

@@ -78,27 +78,80 @@ Embed assets into your Zig binary for portability:
 
 Define custom `@macro(...)` tokens that are replaced with generated Zig code before compilation.
 
-All `.zig` files under a designated source directory are scanned.  Any call that matches a registered macro name is replaced by the string your expansion function returns.  Files with no matching calls are copied verbatim — their bytes are never read into memory.
+All `.zig` files under a designated source directory are scanned. Any call that matches a registered macro name is replaced by the code your expansion function writes through `CodeBuilder`. Files with no matching calls are copied verbatim.
 
 **Tokens inside line comments (`//`), string literals, character literals, and multiline strings (`\\`) are intentionally not expanded.**
 
-#### 1. Write an expansion function in `build.zig`
+#### 1. Write the macro in its own Zig file
 
 ```zig
-fn expandGreeting(allocator: std.mem.Allocator, args: []const u8) anyerror![]u8 {
-    // `args` is the raw text between the parens, e.g. `"World"`
-    const trimmed = std.mem.trim(u8, args, " \t\"");
-    return std.fmt.allocPrint(allocator, "\"Hello, {s}!\"", .{trimmed});
+// build_macros/greeting.zig
+const buildtools = @import("zevy_buildtools");
+
+pub const definition: buildtools.prebuild.MacroDefinition = .{
+    .name = "greeting",
+    .expand = expand,
+};
+
+fn expand(
+    code: *buildtools.prebuild.CodeBuilder,
+    context: buildtools.prebuild.MacroContext,
+) !void {
+    const name = context.stringLiteralArg() orelse {
+        try code.compileError("@greeting requires a string literal argument");
+        return;
+    };
+
+    try code.stringLiteralFmt("Hello, {s}!", .{name});
 }
 ```
 
-#### 2. Register the macro and wire up the module
+
+For a file-backed macro that should behave like a real Zig module, use
+`buildtools.prebuild.moduleDefinition("name", @import("path/to/file.zig"))`.
+The imported file must define:
 
 ```zig
+pub fn main(
+    code: *buildtools.prebuild.CodeBuilder,
+    context: buildtools.prebuild.MacroContext,
+) !void
+```
+
+Example:
+
+```zig
+// build_macros/static_greeting.zig
+const buildtools = @import("zevy_buildtools");
+const implementation = @import("fragments/static_greeting_expr.zig");
+
+pub const definition = buildtools.prebuild.moduleDefinition(
+    "staticGreeting",
+    implementation,
+);
+```
+
+```zig
+// build_macros/fragments/static_greeting_expr.zig
+const buildtools = @import("zevy_buildtools");
+
+pub fn main(
+    code: *buildtools.prebuild.CodeBuilder,
+    _: buildtools.prebuild.MacroContext,
+) !void {
+    try code.stringLiteral("Hello from a file-backed macro!");
+}
+```
+
+#### 2. Import the macro module and wire up the module
+
+```zig
+const greeting_macro = @import("build_macros/greeting.zig");
+
 const pre = try buildtools.prebuild.addPrebuildStep(b, .{
     .src_dir = "src",
     .macros = &.{
-        .{ .name = "greeting", .expand = expandGreeting },
+        greeting_macro.definition,
     },
 });
 
@@ -129,18 +182,32 @@ WriteFile greeter.zig success
 #### MacroDefinition interface
 
 ```zig
-pub const MacroFn = *const fn (allocator: std.mem.Allocator, args: []const u8) anyerror![]u8;
+pub const MacroFn = *const fn (
+    code: *buildtools.prebuild.CodeBuilder,
+    context: buildtools.prebuild.MacroContext,
+) anyerror!void;
 
 pub const MacroDefinition = struct {
     name: []const u8,   // macro name without the leading @
-    expand: MacroFn,    // returns the replacement Zig source
+    expand: MacroFn,    // writes the replacement Zig source
 };
 ```
+
+Useful `CodeBuilder` helpers:
+
+- `code.raw(...)` for preformatted Zig source when needed.
+- `code.file(context, "path/to/fragment.zig")` to append a raw Zig fragment from disk.
+- `code.stringLiteral(...)` and `code.stringLiteralFmt(...)` for correctly escaped strings.
+- `code.compileError(...)` for friendly generated failures.
+
+`code.file(...)` resolves paths relative to the build root / current working directory of the running build.
+
+Prefer `moduleDefinition(..., @import(...))` when you want the file to be normal Zig code.
 
 `expandMacros` is also exported as a public function for use in your own unit tests:
 
 ```zig
-const result = try buildtools.prebuild.expandMacros(allocator, source, &macros);
+const result = try buildtools.prebuild.expandMacros(io, allocator, source, &macros);
 defer allocator.free(result);
 ```
 

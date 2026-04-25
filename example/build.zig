@@ -1,18 +1,14 @@
 const std = @import("std");
 const buildtools = @import("zevy_buildtools");
+const macros = @import("build_macros/root.zig");
 
 // Although this function looks imperative, it does not perform the build
 // directly and instead it mutates the build graph (`b`) that will be then
 // executed by an external runner. The functions in `std.Build` implement a DSL
 // for defining build steps and express dependencies between them, allowing the
 // build runner to parallelize the build automatically (and the cache system to
-// know when a step doesn't need to be re-run).
-
-// ── Prebuild macro: @greeting("Name") → "Hello, Name!" (project-specific) ──
-fn expandGreeting(_: std.Io, allocator: std.mem.Allocator, args: []const u8) anyerror![]u8 {
-    const trimmed = std.mem.trim(u8, args, " \t\"");
-    return std.fmt.allocPrint(allocator, "\"Hello, {s}!\"", .{trimmed});
-}
+// know when a step doesn't need to be re-run).  Another words `build` is more
+// of a "build script" than a function that performs the build itself.
 
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -30,8 +26,10 @@ pub fn build(b: *std.Build) !void {
             buildtools.prebuild.builtins.env_var,
             // Built-in (parameterised): @buildMode() → optimize tag string
             buildtools.prebuild.builtins.buildModeExpander(optimize),
-            // Project-specific: @greeting("Name") → "Hello, Name!"
-            .{ .name = "greeting", .expand = expandGreeting },
+            // Project-specific macro imported from its own Zig module.
+            macros.greeting.definition,
+            // Project-specific macro backed by a raw Zig fragment file.
+            macros.static_greeting.definition,
         },
     });
 

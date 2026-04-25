@@ -1,0 +1,1 @@
+pub const fragment = "raw file macro";

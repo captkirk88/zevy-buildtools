@@ -3,11 +3,10 @@ const example = @import("example");
 const embeds = @import("embedded_assets");
 
 pub fn main() !void {
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-    try example.bufferedPrint();
-
     // Project-specific macro: @greeting("World") → "Hello, World!"
     std.debug.print("{s}\n", .{example.greeter.greet()});
+    // Module-backed macro: static_greeting_expr.zig defines `main(code, context)`.
+    std.debug.print("{s}\n", .{example.greeter.staticGreet()});
 
     // Built-in macros shipped with buildtools.prebuild.builtins:
     std.debug.print("Built at:   {s}\n", .{example.greeter.builtAt()});
