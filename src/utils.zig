@@ -4,7 +4,14 @@ const builtin = @import("builtin");
 /// List all build dependencies recursively as a tree.
 pub fn listBuildDependencies(b: *std.Build) void {
     var visited = std.StringHashMap(void).init(b.allocator);
-    defer visited.deinit();
+    defer {
+        var iter = visited.iterator();
+        while (iter.next()) |entry| {
+            // Free the key string
+            b.allocator.free(entry.key_ptr.*);
+        }
+        visited.deinit();
+    }
 
     const deps = getBuildDependencies(b) catch return;
     for (deps) |dep| {
@@ -36,12 +43,15 @@ fn listBuildDependenciesRecursive(
         std.debug.print("- {s}\n", .{dep_name});
     }
 
-    // Get sub-dependencies
-    const dependency = b.dependency(dep_name, .{});
-    const sub_deps = getBuildDependenciesFromDependency(dependency) catch return;
+    // Get sub-dependencies only when not running under the test runner
+    if (!builtin.is_test) {
+        if (b.lazyDependency(dep_name, .{})) |dep| {
+            const sub_deps = getBuildDependenciesFromDependency(dep) catch return;
 
-    for (sub_deps) |sub_dep| {
-        try listBuildDependenciesRecursive(b, sub_dep, depth + 1, visited);
+            for (sub_deps) |sub_dep| {
+                try listBuildDependenciesRecursive(b, sub_dep, depth + 1, visited);
+            }
+        }
     }
 }
 
