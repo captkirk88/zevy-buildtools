@@ -60,11 +60,18 @@ fn collectEmbeddedAssets(
 
     var dir = std.Io.Dir.cwd().openDir(io, assets_dir_path, .{ .iterate = true, .access_sub_paths = true }) catch |err| switch (err) {
         error.FileNotFound => {
-            // If directory doesn't exist but we have additional files, that's still valid
-            if (options.additional_files != null and options.additional_files.?.len > 0) {
-                return null;
+            // Missing assets directory is valid for dependency/consumer builds.
+            try appendAdditionalFiles(allocator, options.additional_files, options.ignore_regex, asset_paths);
+
+            if (asset_paths.items.len > 1) {
+                std.sort.heap([]const u8, asset_paths.items, {}, struct {
+                    fn lessThan(_: void, a: []const u8, rhs: []const u8) bool {
+                        return std.mem.lessThan(u8, a, rhs);
+                    }
+                }.lessThan);
             }
-            return err;
+
+            return null;
         },
         else => return err,
     };
@@ -78,18 +85,7 @@ fn collectEmbeddedAssets(
 
     try walkEmbeddedAssets(allocator, io, &dir, &path_buffer, asset_paths, options.ignore_regex);
 
-    // Add optional additional files
-    if (options.additional_files) |additional| {
-        for (additional) |file_path| {
-            // Check if file should be ignored
-            if (shouldIgnorePath(file_path, options.ignore_regex)) {
-                continue;
-            }
-            const duplicated = try allocator.dupe(u8, file_path);
-            errdefer allocator.free(duplicated);
-            try asset_paths.append(allocator, duplicated);
-        }
-    }
+    try appendAdditionalFiles(allocator, options.additional_files, options.ignore_regex, asset_paths);
 
     if (asset_paths.items.len > 1) {
         std.sort.heap([]const u8, asset_paths.items, {}, struct {
@@ -100,6 +96,25 @@ fn collectEmbeddedAssets(
     }
 
     return abs_dir;
+}
+
+fn appendAdditionalFiles(
+    allocator: std.mem.Allocator,
+    additional_files: ?[]const []const u8,
+    ignore_regex: ?[]const u8,
+    asset_paths: *std.ArrayList([]const u8),
+) anyerror!void {
+    if (additional_files) |additional| {
+        for (additional) |file_path| {
+            if (shouldIgnorePath(file_path, ignore_regex)) {
+                continue;
+            }
+
+            const duplicated = try allocator.dupe(u8, file_path);
+            errdefer allocator.free(duplicated);
+            try asset_paths.append(allocator, duplicated);
+        }
+    }
 }
 
 fn walkEmbeddedAssets(
