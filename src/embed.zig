@@ -56,7 +56,7 @@ fn collectEmbeddedAssets(
     options: EmbedAssetsOptions,
     asset_paths: *std.ArrayList([]const u8),
 ) anyerror!?[]const u8 {
-    const assets_dir_path = b.path(options.assets_dir).cwd_relative;
+    const assets_dir_path = b.path(options.assets_dir).getPath(b);
 
     var dir = std.Io.Dir.cwd().openDir(io, assets_dir_path, .{ .iterate = true, .access_sub_paths = true }) catch |err| switch (err) {
         error.FileNotFound => {
