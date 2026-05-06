@@ -51,7 +51,7 @@ pub const PrebuildResult = struct {
 /// `WriteFile.addCopyFile` — their source bytes are never read into memory.
 ///
 /// ```zig
-/// const pre = try buildtools.prebuild.addPrebuildStep(b, .{
+/// const pre = try buildtools.prebuild.addMacrosStep(b, .{
 ///     .src_dir = "src",
 ///     .macros  = &.{
 ///         .{ .name = "genFields", .expand = myGenFieldsFn },
@@ -61,7 +61,7 @@ pub const PrebuildResult = struct {
 ///     .root_source_file = pre.file(b, "root.zig"),
 /// });
 /// ```
-pub fn addPrebuildStep(b: *std.Build, options: PrebuildOptions) anyerror!PrebuildResult {
+pub fn addMacrosStep(b: *std.Build, options: PrebuildOptions) anyerror!PrebuildResult {
     const allocator = b.allocator;
     const io = b.graph.io;
     const wf = b.addWriteFiles();
