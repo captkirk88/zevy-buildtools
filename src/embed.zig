@@ -1,6 +1,6 @@
 const std = @import("std");
-
-const Util = @This();
+const utils = @import("utils.zig");
+const Embed = @This();
 
 /// Options for embedding assets into the binary.
 pub const EmbedAssetsOptions = struct {
@@ -33,7 +33,7 @@ pub fn addEmbeddedAssetsModule(
         asset_paths.deinit(allocator);
     }
 
-    const assets_root_opt = try collectEmbeddedAssets(allocator, io, options, &asset_paths);
+    const assets_root_opt = try collectEmbeddedAssets(b, allocator, io, options, &asset_paths);
     defer if (assets_root_opt) |root| allocator.free(root);
 
     const generated_file = try writeEmbeddedModule(b, options, asset_paths.items, assets_root_opt);
@@ -50,12 +50,15 @@ pub fn addEmbeddedAssetsModule(
 }
 
 fn collectEmbeddedAssets(
+    b: *std.Build,
     allocator: std.mem.Allocator,
     io: std.Io,
     options: EmbedAssetsOptions,
     asset_paths: *std.ArrayList([]const u8),
 ) anyerror!?[]const u8 {
-    var dir = std.Io.Dir.cwd().openDir(io, options.assets_dir, .{ .iterate = true, .access_sub_paths = true }) catch |err| switch (err) {
+    const assets_dir_path = b.path(options.assets_dir).cwd_relative;
+
+    var dir = std.Io.Dir.cwd().openDir(io, assets_dir_path, .{ .iterate = true, .access_sub_paths = true }) catch |err| switch (err) {
         error.FileNotFound => {
             // If directory doesn't exist but we have additional files, that's still valid
             if (options.additional_files != null and options.additional_files.?.len > 0) {
@@ -67,7 +70,7 @@ fn collectEmbeddedAssets(
     };
     defer dir.close(io);
 
-    const abs_dir = try std.Io.Dir.cwd().realPathFileAlloc(io, options.assets_dir, allocator);
+    const abs_dir = try std.Io.Dir.cwd().realPathFileAlloc(io, assets_dir_path, allocator);
     errdefer allocator.free(abs_dir);
 
     var path_buffer: std.ArrayListUnmanaged(u8) = .empty;
@@ -90,8 +93,8 @@ fn collectEmbeddedAssets(
 
     if (asset_paths.items.len > 1) {
         std.sort.heap([]const u8, asset_paths.items, {}, struct {
-            fn lessThan(_: void, a: []const u8, b: []const u8) bool {
-                return std.mem.lessThan(u8, a, b);
+            fn lessThan(_: void, a: []const u8, rhs: []const u8) bool {
+                return std.mem.lessThan(u8, a, rhs);
             }
         }.lessThan);
     }
