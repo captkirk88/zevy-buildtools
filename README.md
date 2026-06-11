@@ -1,3 +1,6 @@
+> [!NOTE]
+> Archived, see [zevy-ecs](https://www.github.com/captkirk88/zevy-ecs) README for details.
+
 # zevy-buildtools
 
 A collection of build utilities for Zig projects, designed to streamline asset management, code formatting, and example execution.
